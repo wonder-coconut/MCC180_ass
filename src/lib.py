@@ -8,34 +8,15 @@ Z = np.array([[1,0],[0,-1]],dtype=complex)
 
 H_ad = 1/np.sqrt(2) * np.array([[1,1],[1,-1]],dtype=complex)
 
-#following the psi convention taken before
+#following the convention |psi> = [a,b]T  = a|0> + b|1> 
 sigma_minus = np.array([[0,1],[0,0]],dtype=complex)
 sigma_plus = np.array([[0,0],[1,0]],dtype=complex)
 
 identity = np.array([[1,0],[0,1]],dtype=complex)
 
-
 #helper function to return Hermitian conjugate of a vector
 def H_conj(v):
     return v.conj().T
-
-#evolution operator for mu_bar = 0
-def evol_op1(Hamiltonian, jump_ops, tau, p0):
-    t1 = identity
-    t2 = 1j*tau*Hamiltonian
-    t3 = 0
-    i = 0
-    while(i < len(jump_ops)):
-        t3 += np.matmul(H_conj(jump_ops[i]),jump_ops[i])
-        i += 1
-    t3 = tau/2 * t3
-    return(t1 - t2 - t3)/np.sqrt(p0)
-
-#evolution operator for mu_bar != 0
-def evol_op2(jump_ops, mu_bar, p):
-    numerator = jump_ops[mu_bar-1]
-    denominator = np.sqrt(p[mu_bar])
-    return numerator/denominator
 
 #function to generate an arbitrary qubit state: alpha,beta - unnormalized coeffs of |0> and |1> respectively
 def qubit_state_gen(alpha=0, beta=0):
@@ -54,6 +35,24 @@ def qubit_state_gen(alpha=0, beta=0):
     #taking the convention of ground state being in the 0 position and excited state in 1
 
     return psi
+
+#evolution operator for mu_bar = 0
+def evol_op1(Hamiltonian, jump_ops, tau, p0):
+    t1 = identity
+    t2 = 1j*tau*Hamiltonian
+    t3 = 0
+    i = 0
+    while(i < len(jump_ops)):
+        t3 += np.matmul(H_conj(jump_ops[i]),jump_ops[i])
+        i += 1
+    t3 = tau/2 * t3
+    return(t1 - t2 - t3)/np.sqrt(p0)
+
+#evolution operator for mu_bar != 0
+def evol_op2(jump_ops, mu_bar, p):
+    numerator = jump_ops[mu_bar-1]
+    denominator = np.sqrt(p[mu_bar])
+    return numerator/denominator
 
 #function to run a single iteration of the wmc algorithm
 def wmc_single_step(psi,tau,jump_ops,H):
@@ -103,28 +102,23 @@ def wmc_single_step(psi,tau,jump_ops,H):
     return psi_evol
 
 #function to run all the time steps of the wmc algorithm
-def wmc_driver(time, psi, tau, jump_ops, H):
+def wmc_driver(time, psi, tau, jump_ops, H, op_flag):
     
     iterations = int(time/tau)
     res = []
     for i in range(iterations):
         psi_evol = wmc_single_step(psi, tau, jump_ops, H)
-        res.append(np.abs(psi_evol[1, 0])**2)
+        if(op_flag == 1):
+            #decay output
+            res.append(np.abs(psi_evol[1, 0])**2) #measuring (<1|psi>)^2
+        elif(op_flag == 2):
+            #dephasing output
+            res.append((H_conj(psi_evol) @ X @ psi_evol)[0][0].real) #measuring <psi|X|psi>
+        elif(op_flag == 3):
+            #decoherence output
+            temp = np.array([np.abs(psi_evol[1, 0])**2, (H_conj(psi_evol) @ X @ psi_evol)[0][0]])
+            res.append(temp)
         psi = psi_evol
     
-    return res
-
-#main driver
-psi = qubit_state_gen(0,1) #excited state
-tau = 0.01 #time step
-gamma = 1 #decay rate
-time = 10/gamma #total time
-jump_ops = [sigma_minus] #jump operators defining the dissipation
-H = np.zeros((2,2)) #zero hamiltonian to only model decay
-n_trajectories = 1 #number of trajectories to model
-
-for i in range(100):
-    res = wmc_driver(time,psi,tau,jump_ops,H)
-    res = np.array(res)
-    plt.plot(res)
-plt.show()
+    
+    return np.array(res)
